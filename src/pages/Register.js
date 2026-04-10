@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { useAuth } from '../context/AuthContext';
@@ -31,21 +31,67 @@ const pwdStrength = (v) => {
 };
 
 const Register = () => {
-  const [form, setForm]       = useState({ name:'', email:'', password:'', role:'customer', phone:'', address:'' });
-  const [loading, setLoading] = useState(false);
+  const [form, setForm]         = useState({ name:'', email:'', password:'', role:'customer', phone:'', address:'' });
+  const [loading, setLoading]   = useState(false);
   const [showPass, setShowPass] = useState(false);
-  // touched tracks if user LEFT the field (blur) AND the field is non-empty
-  const [touched, setTouched] = useState({});
+  const [touched, setTouched]   = useState({});
   const { register } = useAuth();
   const navigate = useNavigate();
 
-  // Only mark touched when user blurs AND has typed something meaningful
-  const handleBlur = (field, minLen = 1) => {
-    if (form[field] && form[field].length >= minLen) {
-      setTouched(p => ({ ...p, [field]: true }));
-    }
-  };
+  // ── Stable field updaters (no inline arrow fns in JSX) ──────────────────────
+  const handleNameChange     = useCallback(e => setForm(p => ({ ...p, name: e.target.value })), []);
+  const handleEmailChange    = useCallback(e => setForm(p => ({ ...p, email: e.target.value })), []);
+  const handlePasswordChange = useCallback(e => setForm(p => ({ ...p, password: e.target.value })), []);
+  const handleAddressChange  = useCallback(e => setForm(p => ({ ...p, address: e.target.value })), []);
 
+  // Phone: only prepend +91 once, when field is EMPTY and user starts typing digits
+  const handlePhoneChange = useCallback(e => {
+    let raw = e.target.value;
+    // Strip anything that isn't digits, +, or space
+    raw = raw.replace(/[^0-9+\s]/g, '');
+    // Auto-prefix only when field was empty and user hasn't typed + yet
+    if (raw.length > 0 && !raw.startsWith('+')) {
+      raw = '+91' + raw;
+    }
+    setForm(p => ({ ...p, phone: raw }));
+  }, []);
+
+  const handleRoleChange = useCallback(role => {
+    setForm(p => ({ ...p, role }));
+  }, []);
+
+  const handleTogglePass = useCallback(() => setShowPass(p => !p), []);
+
+  // ── Blur handlers ────────────────────────────────────────────────────────────
+  const handleNameBlur = useCallback(() => {
+    setForm(p => {
+      if (p.name && p.name.length >= 2) setTouched(t => ({ ...t, name: true }));
+      return p;
+    });
+  }, []);
+
+  const handleEmailBlur = useCallback(() => {
+    setForm(p => {
+      if (p.email && p.email.length >= 5) setTouched(t => ({ ...t, email: true }));
+      return p;
+    });
+  }, []);
+
+  const handlePhoneBlur = useCallback(() => {
+    setForm(p => {
+      if (p.phone && p.phone.length >= 5) setTouched(t => ({ ...t, phone: true }));
+      return p;
+    });
+  }, []);
+
+  const handlePasswordBlur = useCallback(() => {
+    setForm(p => {
+      if (p.password && p.password.length >= 3) setTouched(t => ({ ...t, password: true }));
+      return p;
+    });
+  }, []);
+
+  // ── Derived state ────────────────────────────────────────────────────────────
   const errors = {
     name:     form.name.trim().length < 2
                 ? 'Name must be at least 2 characters' : '',
@@ -62,7 +108,6 @@ const Register = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    // Show all errors on submit
     setTouched({ name:true, email:true, phone:!!form.phone, password:true });
     if (!isFormValid) {
       toast.error('Please fix the highlighted errors');
@@ -85,7 +130,6 @@ const Register = () => {
   const strength = pwdStrength(form.password);
   const selectedRole = ROLES.find(r => r.value === form.role);
 
-  // Helper to get border color for a field
   const borderColor = (field) => {
     if (!touched[field] || !form[field]) return '';
     return errors[field] ? '#e53935' : 'var(--accent)';
@@ -107,7 +151,7 @@ const Register = () => {
             {ROLES.map(r => (
               <button
                 type="button" key={r.value}
-                onClick={() => setForm({ ...form, role: r.value })}
+                onClick={() => handleRoleChange(r.value)}
                 style={{
                   padding:'0.9rem 0.4rem',
                   border:`2px solid ${form.role === r.value ? r.color : '#e0e0e0'}`,
@@ -134,11 +178,10 @@ const Register = () => {
               type="text" className="form-input"
               placeholder="e.g. Priya Singh"
               value={form.name}
-              onChange={e => setForm({ ...form, name: e.target.value })}
-              onBlur={() => handleBlur('name', 2)}
+              onChange={handleNameChange}
+              onBlur={handleNameBlur}
               style={{ borderColor: borderColor('name') }}
             />
-            {/* Only show error after blur AND name is long enough to have tried */}
             {touched.name && errors.name && form.name.length >= 1 && (
               <div style={{ color:'#e53935', fontSize:'0.78rem', marginTop:'0.3rem', fontWeight:600 }}>
                 ⚠️ {errors.name}
@@ -156,8 +199,8 @@ const Register = () => {
               type="email" className="form-input"
               placeholder="priya@gmail.com"
               value={form.email}
-              onChange={e => setForm({ ...form, email: e.target.value })}
-              onBlur={() => handleBlur('email', 5)}
+              onChange={handleEmailChange}
+              onBlur={handleEmailBlur}
               style={{ borderColor: borderColor('email') }}
             />
             {touched.email && errors.email && (
@@ -177,12 +220,8 @@ const Register = () => {
               type="tel" className="form-input"
               placeholder="+91 9876543210"
               value={form.phone}
-              onChange={e => {
-                let v = e.target.value.replace(/[^0-9+\s]/g,'');
-                if (v && !v.startsWith('+')) v = '+91' + v;
-                setForm({ ...form, phone: v });
-              }}
-              onBlur={() => { if (form.phone.length >= 5) handleBlur('phone', 5); }}
+              onChange={handlePhoneChange}
+              onBlur={handlePhoneBlur}
               style={{ borderColor: borderColor('phone') }}
             />
             <div style={{ color:'var(--text-light)', fontSize:'0.75rem', marginTop:'0.3rem' }}>
@@ -206,7 +245,7 @@ const Register = () => {
                 type="text" className="form-input"
                 placeholder="e.g. Flat 3A, Kondapur, Hyderabad"
                 value={form.address}
-                onChange={e => setForm({ ...form, address: e.target.value })}
+                onChange={handleAddressChange}
               />
             </div>
           )}
@@ -220,20 +259,18 @@ const Register = () => {
                 className="form-input"
                 placeholder="e.g. Hello123!@"
                 value={form.password}
-                onChange={e => setForm({ ...form, password: e.target.value })}
-                onBlur={() => handleBlur('password', 3)}
+                onChange={handlePasswordChange}
+                onBlur={handlePasswordBlur}
                 style={{ paddingRight:'3rem', borderColor: borderColor('password') }}
               />
               <button
-                type="button" onClick={() => setShowPass(!showPass)}
+                type="button" onClick={handleTogglePass}
                 style={{ position:'absolute', right:'0.8rem', top:'50%', transform:'translateY(-50%)', background:'none', border:'none', cursor:'pointer', fontSize:'1.1rem' }}
               >{showPass ? '🙈' : '👁️'}</button>
             </div>
 
-            {/* Live checklist — shows as soon as user starts typing */}
             {form.password.length > 0 && (
               <div style={{ marginTop:'0.6rem' }}>
-                {/* Strength bar */}
                 <div style={{ display:'flex', justifyContent:'space-between', marginBottom:'0.3rem' }}>
                   <span style={{ fontSize:'0.72rem', color:'var(--text-light)' }}>Strength</span>
                   {strength && <span style={{ fontSize:'0.72rem', fontWeight:700, color:strength.color }}>{strength.label}</span>}
@@ -241,7 +278,6 @@ const Register = () => {
                 <div style={{ height:'5px', background:'#e0e0e0', borderRadius:'3px', overflow:'hidden', marginBottom:'0.5rem' }}>
                   <div style={{ height:'100%', background:strength?.color||'#e0e0e0', width:`${strength?.pct||0}%`, transition:'all 0.3s', borderRadius:'3px' }}></div>
                 </div>
-                {/* Requirements checklist */}
                 {[
                   { done: form.password.length >= 4,                                             text:'At least 4 characters' },
                   { done: (form.password.match(/\d/g)||[]).length >= 3,                          text:'At least 3 numbers (e.g. 123)' },
@@ -255,7 +291,6 @@ const Register = () => {
               </div>
             )}
 
-            {/* Error only after blur */}
             {touched.password && errors.password && form.password.length >= 3 && (
               <div style={{ color:'#e53935', fontSize:'0.78rem', marginTop:'0.4rem', fontWeight:600 }}>
                 ⚠️ Please meet all password requirements above
