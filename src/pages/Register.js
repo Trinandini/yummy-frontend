@@ -9,56 +9,63 @@ const ROLES = [
   { value: 'owner',    emoji: '🏪', title: 'Restaurant Owner', desc: 'Manage orders & delivery team', color: '#845EC2' },
 ];
 
-// ── Validation rules ──────────────────────────────────────────────
-const validate = {
-  name:     v => v.trim().length >= 2,
-  email:    v => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v),
-  phone:    v => !v || /^\+91[6-9]\d{9}$/.test(v.replace(/\s/g,'')),
-  password: v => {
-    const hasMin4    = v.length >= 4;
-    const hasSpecial = /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(v);
-    const numCount   = (v.match(/\d/g) || []).length;
-    return hasMin4 && hasSpecial && numCount >= 3;
-  }
+const isValidEmail    = (v) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
+const isValidPhone    = (v) => !v || /^\+91[6-9]\d{9}$/.test(v.replace(/\s/g,''));
+const isValidPassword = (v) => {
+  if (!v || v.length < 4) return false;
+  const hasSpecial = /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(v);
+  const numCount   = (v.match(/\d/g) || []).length;
+  return hasSpecial && numCount >= 3;
 };
 
 const pwdStrength = (v) => {
+  if (!v) return null;
   const hasMin4    = v.length >= 4;
   const hasSpecial = /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(v);
-  const nums       = (v.match(/\d/g) || []).length;
-  const score = [hasMin4, hasSpecial, nums >= 3].filter(Boolean).length;
+  const nums       = (v.match(/\d/g) || []).length >= 3;
+  const score = [hasMin4, hasSpecial, nums].filter(Boolean).length;
   if (score === 0) return null;
-  if (score === 1) return { label: 'Weak',   color: '#e53935', pct: 33 };
-  if (score === 2) return { label: 'Medium', color: '#FF6B35', pct: 66 };
-  return              { label: 'Strong',  color: '#06D6A0', pct: 100 };
+  if (score === 1) return { label:'Weak',   color:'#e53935', pct:33 };
+  if (score === 2) return { label:'Medium', color:'#FF6B35', pct:66 };
+  return              { label:'Strong',  color:'#06D6A0', pct:100 };
 };
 
 const Register = () => {
   const [form, setForm]       = useState({ name:'', email:'', password:'', role:'customer', phone:'', address:'' });
   const [loading, setLoading] = useState(false);
   const [showPass, setShowPass] = useState(false);
+  // touched tracks if user LEFT the field (blur) AND the field is non-empty
   const [touched, setTouched] = useState({});
   const { register } = useAuth();
   const navigate = useNavigate();
 
-  const touch = (field) => setTouched(p => ({ ...p, [field]: true }));
-
-  const errors = {
-    name:     !validate.name(form.name)     ? 'Name must be at least 2 characters' : '',
-    email:    !validate.email(form.email)   ? 'Enter a valid email (e.g. you@gmail.com)' : '',
-    phone:    form.phone && !validate.phone(form.phone) ? 'Must start with +91 followed by 10 digits (e.g. +91 9876543210)' : '',
-    password: !validate.password(form.password)
-      ? 'Min 4 chars, 3 numbers and 1 special character required'
-      : '',
+  // Only mark touched when user blurs AND has typed something meaningful
+  const handleBlur = (field, minLen = 1) => {
+    if (form[field] && form[field].length >= minLen) {
+      setTouched(p => ({ ...p, [field]: true }));
+    }
   };
 
-  const isFormValid = !errors.name && !errors.email && !errors.phone && !errors.password && form.name && form.email && form.password;
+  const errors = {
+    name:     form.name.trim().length < 2
+                ? 'Name must be at least 2 characters' : '',
+    email:    !isValidEmail(form.email)
+                ? 'Enter a valid email (e.g. you@gmail.com)' : '',
+    phone:    form.phone && !isValidPhone(form.phone)
+                ? 'Must be +91 followed by 10 digits (e.g. +91 9876543210)' : '',
+    password: !isValidPassword(form.password)
+                ? 'Need: 4+ chars, 3 numbers, 1 special character' : '',
+  };
+
+  const isFormValid = !errors.name && !errors.email && !errors.phone &&
+                      !errors.password && form.name && form.email && form.password;
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setTouched({ name:true, email:true, phone:true, password:true });
+    // Show all errors on submit
+    setTouched({ name:true, email:true, phone:!!form.phone, password:true });
     if (!isFormValid) {
-      toast.error('Please fix the errors before submitting');
+      toast.error('Please fix the highlighted errors');
       return;
     }
     setLoading(true);
@@ -78,23 +85,11 @@ const Register = () => {
   const strength = pwdStrength(form.password);
   const selectedRole = ROLES.find(r => r.value === form.role);
 
-  const Field = ({ field, label, children, hint }) => (
-    <div className="form-group">
-      <label className="form-label">{label}</label>
-      {children}
-      {touched[field] && errors[field] && (
-        <div style={{ color:'#e53935', fontSize:'0.78rem', marginTop:'0.3rem', fontWeight:600, display:'flex', alignItems:'center', gap:'0.3rem' }}>
-          ⚠️ {errors[field]}
-        </div>
-      )}
-      {touched[field] && !errors[field] && form[field] && (
-        <div style={{ color:'var(--accent)', fontSize:'0.78rem', marginTop:'0.3rem', fontWeight:600 }}>✅ Looks good!</div>
-      )}
-      {hint && !touched[field] && (
-        <div style={{ color:'var(--text-light)', fontSize:'0.75rem', marginTop:'0.3rem' }}>{hint}</div>
-      )}
-    </div>
-  );
+  // Helper to get border color for a field
+  const borderColor = (field) => {
+    if (!touched[field] || !form[field]) return '';
+    return errors[field] ? '#e53935' : 'var(--accent)';
+  };
 
   return (
     <div className="auth-page">
@@ -131,51 +126,82 @@ const Register = () => {
         </div>
 
         <form onSubmit={handleSubmit} noValidate>
+
           {/* NAME */}
-          <Field field="name" label="👤 Full Name" hint="At least 2 characters">
+          <div className="form-group">
+            <label className="form-label">👤 Full Name</label>
             <input
               type="text" className="form-input"
               placeholder="e.g. Priya Singh"
               value={form.name}
               onChange={e => setForm({ ...form, name: e.target.value })}
-              onBlur={() => touch('name')}
-              style={{ borderColor: touched.name && errors.name ? '#e53935' : touched.name && !errors.name && form.name ? 'var(--accent)' : '' }}
+              onBlur={() => handleBlur('name', 2)}
+              style={{ borderColor: borderColor('name') }}
             />
-          </Field>
+            {/* Only show error after blur AND name is long enough to have tried */}
+            {touched.name && errors.name && form.name.length >= 1 && (
+              <div style={{ color:'#e53935', fontSize:'0.78rem', marginTop:'0.3rem', fontWeight:600 }}>
+                ⚠️ {errors.name}
+              </div>
+            )}
+            {touched.name && !errors.name && (
+              <div style={{ color:'var(--accent)', fontSize:'0.78rem', marginTop:'0.3rem', fontWeight:600 }}>✅ Looks good!</div>
+            )}
+          </div>
 
           {/* EMAIL */}
-          <Field field="email" label="📧 Email Address" hint="e.g. priya@gmail.com">
+          <div className="form-group">
+            <label className="form-label">📧 Email Address</label>
             <input
               type="email" className="form-input"
               placeholder="priya@gmail.com"
               value={form.email}
               onChange={e => setForm({ ...form, email: e.target.value })}
-              onBlur={() => touch('email')}
-              style={{ borderColor: touched.email && errors.email ? '#e53935' : touched.email && !errors.email && form.email ? 'var(--accent)' : '' }}
+              onBlur={() => handleBlur('email', 5)}
+              style={{ borderColor: borderColor('email') }}
             />
-          </Field>
+            {touched.email && errors.email && (
+              <div style={{ color:'#e53935', fontSize:'0.78rem', marginTop:'0.3rem', fontWeight:600 }}>
+                ⚠️ {errors.email}
+              </div>
+            )}
+            {touched.email && !errors.email && (
+              <div style={{ color:'var(--accent)', fontSize:'0.78rem', marginTop:'0.3rem', fontWeight:600 }}>✅ Looks good!</div>
+            )}
+          </div>
 
           {/* PHONE */}
-          <Field field="phone" label="📱 Phone Number" hint="Indian number: +91 followed by 10 digits">
+          <div className="form-group">
+            <label className="form-label">📱 Phone Number <span style={{ color:'var(--text-light)', fontWeight:400, fontSize:'0.8rem' }}>(optional)</span></label>
             <input
               type="tel" className="form-input"
               placeholder="+91 9876543210"
               value={form.phone}
               onChange={e => {
                 let v = e.target.value.replace(/[^0-9+\s]/g,'');
-                // Auto-add +91 prefix
                 if (v && !v.startsWith('+')) v = '+91' + v;
                 setForm({ ...form, phone: v });
               }}
-              onBlur={() => touch('phone')}
-              style={{ borderColor: touched.phone && errors.phone ? '#e53935' : touched.phone && !errors.phone && form.phone ? 'var(--accent)' : '' }}
+              onBlur={() => { if (form.phone.length >= 5) handleBlur('phone', 5); }}
+              style={{ borderColor: borderColor('phone') }}
             />
-          </Field>
+            <div style={{ color:'var(--text-light)', fontSize:'0.75rem', marginTop:'0.3rem' }}>
+              Format: +91 followed by 10 digits
+            </div>
+            {touched.phone && errors.phone && (
+              <div style={{ color:'#e53935', fontSize:'0.78rem', marginTop:'0.2rem', fontWeight:600 }}>
+                ⚠️ {errors.phone}
+              </div>
+            )}
+            {touched.phone && !errors.phone && form.phone && (
+              <div style={{ color:'var(--accent)', fontSize:'0.78rem', marginTop:'0.2rem', fontWeight:600 }}>✅ Valid Indian number!</div>
+            )}
+          </div>
 
           {/* ADDRESS (customer only) */}
           {form.role === 'customer' && (
             <div className="form-group">
-              <label className="form-label">📍 Delivery Address</label>
+              <label className="form-label">📍 Delivery Address <span style={{ color:'var(--text-light)', fontWeight:400, fontSize:'0.8rem' }}>(optional)</span></label>
               <input
                 type="text" className="form-input"
                 placeholder="e.g. Flat 3A, Kondapur, Hyderabad"
@@ -186,23 +212,17 @@ const Register = () => {
           )}
 
           {/* PASSWORD */}
-          <Field
-            field="password"
-            label="🔑 Password"
-            hint="Min 4 chars + 3 numbers + 1 special character"
-          >
+          <div className="form-group">
+            <label className="form-label">🔑 Password</label>
             <div style={{ position:'relative' }}>
               <input
                 type={showPass ? 'text' : 'password'}
                 className="form-input"
-                placeholder="e.g. Pass123!@"
+                placeholder="e.g. Hello123!@"
                 value={form.password}
                 onChange={e => setForm({ ...form, password: e.target.value })}
-                onBlur={() => touch('password')}
-                style={{
-                  paddingRight:'3rem',
-                  borderColor: touched.password && errors.password ? '#e53935' : touched.password && !errors.password && form.password ? 'var(--accent)' : ''
-                }}
+                onBlur={() => handleBlur('password', 3)}
+                style={{ paddingRight:'3rem', borderColor: borderColor('password') }}
               />
               <button
                 type="button" onClick={() => setShowPass(!showPass)}
@@ -210,36 +230,45 @@ const Register = () => {
               >{showPass ? '🙈' : '👁️'}</button>
             </div>
 
-            {/* Password strength bar */}
+            {/* Live checklist — shows as soon as user starts typing */}
             {form.password.length > 0 && (
-              <div style={{ marginTop:'0.5rem' }}>
+              <div style={{ marginTop:'0.6rem' }}>
+                {/* Strength bar */}
                 <div style={{ display:'flex', justifyContent:'space-between', marginBottom:'0.3rem' }}>
-                  <span style={{ fontSize:'0.75rem', color:'var(--text-light)' }}>Password strength</span>
-                  {strength && <span style={{ fontSize:'0.75rem', fontWeight:700, color:strength.color }}>{strength.label}</span>}
+                  <span style={{ fontSize:'0.72rem', color:'var(--text-light)' }}>Strength</span>
+                  {strength && <span style={{ fontSize:'0.72rem', fontWeight:700, color:strength.color }}>{strength.label}</span>}
                 </div>
-                <div style={{ height:'5px', background:'#e0e0e0', borderRadius:'3px', overflow:'hidden' }}>
-                  <div style={{ height:'100%', background:strength?.color || '#e0e0e0', width:`${strength?.pct || 0}%`, transition:'width 0.3s, background 0.3s', borderRadius:'3px' }}></div>
+                <div style={{ height:'5px', background:'#e0e0e0', borderRadius:'3px', overflow:'hidden', marginBottom:'0.5rem' }}>
+                  <div style={{ height:'100%', background:strength?.color||'#e0e0e0', width:`${strength?.pct||0}%`, transition:'all 0.3s', borderRadius:'3px' }}></div>
                 </div>
-                {/* Checklist */}
-                <div style={{ marginTop:'0.5rem', display:'flex', flexDirection:'column', gap:'0.2rem' }}>
-                  {[
-                    { check: form.password.length >= 4,                                               label:'At least 4 characters' },
-                    { check: (form.password.match(/\d/g)||[]).length >= 3,                            label:'At least 3 numbers' },
-                    { check: /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(form.password),           label:'At least 1 special character (!@#$...)' },
-                  ].map((item, i) => (
-                    <div key={i} style={{ display:'flex', alignItems:'center', gap:'0.4rem', fontSize:'0.75rem', color: item.check ? 'var(--accent)' : 'var(--text-light)' }}>
-                      <span>{item.check ? '✅' : '○'}</span>
-                      <span>{item.label}</span>
-                    </div>
-                  ))}
-                </div>
+                {/* Requirements checklist */}
+                {[
+                  { done: form.password.length >= 4,                                             text:'At least 4 characters' },
+                  { done: (form.password.match(/\d/g)||[]).length >= 3,                          text:'At least 3 numbers (e.g. 123)' },
+                  { done: /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(form.password),         text:'At least 1 special character (!@#$...)' },
+                ].map((item, i) => (
+                  <div key={i} style={{ display:'flex', alignItems:'center', gap:'0.4rem', fontSize:'0.75rem', color: item.done ? 'var(--accent)' : 'var(--text-light)', marginBottom:'0.2rem' }}>
+                    <span style={{ fontSize:'0.9rem' }}>{item.done ? '✅' : '○'}</span>
+                    <span style={{ textDecoration: item.done ? 'line-through' : 'none' }}>{item.text}</span>
+                  </div>
+                ))}
               </div>
             )}
-          </Field>
+
+            {/* Error only after blur */}
+            {touched.password && errors.password && form.password.length >= 3 && (
+              <div style={{ color:'#e53935', fontSize:'0.78rem', marginTop:'0.4rem', fontWeight:600 }}>
+                ⚠️ Please meet all password requirements above
+              </div>
+            )}
+          </div>
 
           <button
             type="submit" className="submit-btn" disabled={loading}
-            style={{ background:`linear-gradient(135deg, ${selectedRole?.color || 'var(--primary)'}, #FF6B9D)`, opacity: loading ? 0.7 : 1 }}
+            style={{
+              background: `linear-gradient(135deg, ${selectedRole?.color||'var(--primary)'}, #FF6B9D)`,
+              opacity: loading ? 0.7 : 1
+            }}
           >
             {loading ? '⏳ Creating account...' : `${selectedRole?.emoji} Create ${selectedRole?.title} Account`}
           </button>
