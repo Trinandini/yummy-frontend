@@ -2,20 +2,17 @@ import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { useAuth } from '../context/AuthContext';
-
 const ROLES = [
   { value: 'customer', emoji: '🛍️', title: 'Customer',          desc: 'Order food from restaurants',  color: '#06D6A0' },
   { value: 'delivery', emoji: '🛵', title: 'Delivery Person',   desc: 'Deliver orders & earn',         color: '#00B4D8' },
   { value: 'owner',    emoji: '🏪', title: 'Restaurant Owner',  desc: 'Manage orders & delivery team', color: '#845EC2' },
 ];
-
 const Register = () => {
   const [form, setForm]       = useState({ name: '', email: '', password: '', role: 'customer', phone: '', address: '' });
   const [loading, setLoading] = useState(false);
   const [showPass, setShowPass] = useState(false);
   const { register } = useAuth();
   const navigate = useNavigate();
-
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!form.name.trim())        { toast.error('Please enter your full name'); return; }
@@ -33,9 +30,7 @@ const Register = () => {
       setLoading(false);
     }
   };
-
   const selectedRole = ROLES.find(r => r.value === form.role);
-
   return (
     <div className="auth-page">
       <div className="auth-card" style={{ maxWidth: '480px' }}>
@@ -44,7 +39,6 @@ const Register = () => {
           <h1 className="auth-title" style={{ textAlign: 'center' }}>Create Account</h1>
           <p className="auth-sub">Join Yummy — choose your role below</p>
         </div>
-
         {/* ROLE SELECTOR */}
         <div className="form-group">
           <label className="form-label">I want to join as...</label>
@@ -71,7 +65,6 @@ const Register = () => {
             ))}
           </div>
         </div>
-
         {/* Role-specific info banner */}
         {form.role === 'owner' && (
           <div style={{
@@ -87,11 +80,11 @@ const Register = () => {
             </div>
           </div>
         )}
-
         <form onSubmit={handleSubmit}>
           <div className="form-group">
             <label className="form-label">👤 Full Name</label>
             <input
+              key="input-name"
               id="register-name"
               name="name"
               type="text" className="form-input"
@@ -101,10 +94,10 @@ const Register = () => {
               required
             />
           </div>
-
           <div className="form-group">
             <label className="form-label">📧 Email Address</label>
             <input
+              key="input-email"
               id="register-email"
               name="email"
               type="email" className="form-input"
@@ -114,10 +107,10 @@ const Register = () => {
               required
             />
           </div>
-
           <div className="form-group">
             <label className="form-label">📱 Phone Number</label>
             <input
+              key="input-phone"
               id="register-phone"
               name="phone"
               type="tel" className="form-input"
@@ -126,11 +119,11 @@ const Register = () => {
               onChange={e => setForm({ ...form, phone: e.target.value })}
             />
           </div>
-
           {form.role === 'customer' && (
             <div className="form-group">
               <label className="form-label">📍 Delivery Address</label>
               <input
+                key="input-address"
                 id="register-address"
                 name="address"
                 type="text" className="form-input"
@@ -140,11 +133,11 @@ const Register = () => {
               />
             </div>
           )}
-
           <div className="form-group">
             <label className="form-label">🔑 Password</label>
             <div style={{ position: 'relative' }}>
               <input
+                key="input-password"
                 id="register-password"
                 name="password"
                 type={showPass ? 'text' : 'password'}
@@ -175,7 +168,6 @@ const Register = () => {
               </div>
             )}
           </div>
-
           <button
             type="submit" className="submit-btn" disabled={loading}
             style={{ background: `linear-gradient(135deg, ${selectedRole?.color || 'var(--primary)'}, #FF6B9D)` }}
@@ -185,7 +177,6 @@ const Register = () => {
               : `${selectedRole?.emoji} Create ${selectedRole?.title} Account`}
           </button>
         </form>
-
         <div className="auth-link" style={{ marginTop: '1rem' }}>
           Already have an account? <Link to="/login">Login here →</Link>
         </div>
@@ -193,5 +184,4 @@ const Register = () => {
     </div>
   );
 };
-
 export default Register;
